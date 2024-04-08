@@ -1,1 +1,3 @@
-# Flutter_Web_View_Template
+# web_view_application
+
+A new Flutter project.
