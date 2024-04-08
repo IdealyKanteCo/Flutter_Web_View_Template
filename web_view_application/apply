@@ -1,0 +1,91 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Fonction pour afficher les erreurs
+afficher_erreur() {
+    local message="$1"
+    echo -e "\e[31mErreur : $message\e[0m" >&2
+}
+
+# Fonction pour vérifier si un fichier existe
+verifier_fichier() {
+    local chemin_fichier="$1"
+    if [ ! -f "$chemin_fichier" ]; then
+        afficher_erreur "Le fichier $chemin_fichier n'existe pas"
+        exit 1
+    fi
+}
+
+# Fonction pour installer Flutter localement
+installer_flutter() {
+    local flutter_url="https://storage.googleapis.com/flutter_infra/releases/stable/linux/flutter_linux_$(uname -m).tar.xz"
+    local install_dir="$HOME/flutter"
+    echo "Téléchargement et installation de Flutter..."
+    mkdir -p "$install_dir"
+    curl -fsSL "$flutter_url" | tar xJ -C "$install_dir"
+    export PATH="$install_dir/flutter/bin:$PATH"
+}
+
+# Vérifier si Flutter est installé
+if ! command -v flutter &> /dev/null; then
+    installer_flutter
+fi
+
+# Exécuter 'flutter pub get'
+flutter pub get || { afficher_erreur "Erreur lors de l'exécution de 'flutter pub get'"; exit 1; }
+
+# Lire le fichier param.conf
+source ./param.conf || { afficher_erreur "Erreur lors de la lecture de param.conf"; exit 1; }
+
+# Vérifier si le fichier logo_app existe
+verifier_fichier "$LOGO_APP"
+
+# Vérifier chaque paramètre
+declare -a parametres=("NOM_APP" "LOGO_APP" "LIEN_WEB_VIEW" "BG_APP" "LOGO_LANCEMENT")
+for parametre in "${parametres[@]}"; do
+    if [ -z "${!parametre-}" ]; then
+        afficher_erreur "$parametre n'est pas défini"
+        exit 1
+    fi
+done
+
+# Fonction pour remplacer une valeur dans un fichier
+remplacer_valeur() {
+    local nom_variable="$1"
+    local nouvelle_valeur="$2"
+    local fichier="$3"
+    if grep -q "^$nom_variable=" "$fichier"; then
+        sed -i "s|^$nom_variable=.*|$nom_variable='$nouvelle_valeur'|" "$fichier"
+    else
+        echo "$nom_variable='$nouvelle_valeur'" >> "$fichier"
+    fi
+}
+
+# Remplacer les valeurs dans le fichier .env
+remplacer_valeur "WEB_VIEW_LINK" "$LIEN_WEB_VIEW" ".env"
+remplacer_valeur "APP_BG_COLOR" "$BG_APP" ".env"
+
+# Traiter les paramètres spécifiques
+if [ -n "${NOM_APP-}" ]; then
+    dart run rename_app:main all="$NOM_APP" || afficher_erreur "Erreur lors du renommage de l'application"
+fi
+
+if [ -n "${LOGO_APP-}" ]; then
+    LOGO_APP_escaped=$(sed 's/[&/\]/\\&/g' <<< "$LOGO_APP")
+    sed -i "s/image_path: .*/image_path: \"$LOGO_APP_escaped\"/" "$(pwd)/launcher_icons.yaml" || afficher_erreur "Erreur lors du remplacement de image_path dans launcher_icons.yaml"
+    dart run flutter_launcher_icons -f "$(pwd)/launcher_icons.yaml" || afficher_erreur "Erreur lors de l'exécution de flutter_launcher_icons"
+fi
+
+if [ -n "${LOGO_LANCEMENT-}" ]; then
+    LOGO_LANCEMENT_escaped=$(sed 's/[&/\]/\\&/g' <<< "$LOGO_LANCEMENT")
+    sed -i "s/image: .*/image: \"$LOGO_LANCEMENT_escaped\"/" "$(pwd)/flutter_native_splash.yaml" || afficher_erreur "Erreur lors du remplacement de image dans flutter_native_splash.yaml"
+    dart run flutter_native_splash:create --path="$(pwd)/flutter_native_splash.yaml" || afficher_erreur "Erreur lors de la création de l'écran de lancement"
+fi
+
+echo "Compilation du fichier apk"
+
+flutter build appbundle
+flutter build apk --split-per-abi
+
+echo "Le script s'est exécuté avec succès."

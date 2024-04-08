@@ -1,0 +1,9 @@
+flutter_launcher_icons:
+  # Spécifie le nom de l'icône de lancement Android. C'est le nom du fichier d'icône sans l'extension.
+  android: "launcher_icon"
+  # Active ou désactive la génération d'icônes de lancement pour iOS. Mettre cette valeur à true signifie que les icônes seront générées pour iOS.
+  ios: true
+  # Spécifie le chemin vers l'image source qui sera utilisée pour générer les icônes de lancement. Ce chemin est relatif à la racine du projet.
+  image_path: "assets/icon/icon.png"
+  # Spécifie la version minimale du SDK pour Android. Cela est utilisé pour s'assurer que les icônes générées sont compatibles avec la version Android spécifiée et supérieure.
+  min_sdk_android: 21
