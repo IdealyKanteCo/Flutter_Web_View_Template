@@ -1,6 +1,6 @@
 {
-     "name": "Mon Application",
-     "short_name": "Mon Application",
+     "name": "Teksi Shop",
+     "short_name": "Teksi Shop",
      "start_url": ".",
      "display": "standalone",
      "background_color": "#fff",
