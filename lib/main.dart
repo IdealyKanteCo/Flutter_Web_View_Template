@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:hexcolor/hexcolor.dart';
+import 'package:mon_application/screens/contact_app_screen.dart';
 import 'package:mon_application/screens/web_view_screen.dart';
+
+import 'widgets/main_drawer.dart';
 
 void main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -12,32 +15,34 @@ void main() async {
 }
 
 class MainApp extends StatelessWidget {
+  final _routes = {
+    '/': (context) => const WebViewScreen(),
+    '/contact': (context) => const ContactScreen(),
+  };
+
+
   MainApp({super.key});
-  final bgColor = dotenv.env['APP_BG_COLOR'] ?? '#FFFFFF';
+  final bgColor = '#FFFFFF';
+  final appBarColor = dotenv.env['APP_BG_COLOR'] ?? '#FFFFFF';
   @override
   Widget build(BuildContext context) {
     return  MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(scaffoldBackgroundColor: HexColor(bgColor)),
-      home: const WebViewApplication(),
-    );
-  }
-}
-
-class WebViewApplication extends StatefulWidget {
-  const WebViewApplication({super.key});
-
-  @override
-  State<WebViewApplication> createState() => _WebViewApplicationState();
-}
-
-class _WebViewApplicationState extends State<WebViewApplication> {
-  bool isWebViewLoaded = false;
-  
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: SafeArea(child: WebViewScreen()) ,
+      routes: {
+        ..._routes.map((routeName, routeBuilder) {
+          return MapEntry(routeName, (context) => Scaffold(
+                drawer: const MainDrawer(),
+                appBar: AppBar(
+                  title: const Text('Teski Shop'),
+                  backgroundColor: HexColor(appBarColor),
+                ),
+                body: SafeArea(
+                  child: routeBuilder(context),
+                ),
+              ));
+        }),
+      },
     );
   }
 }

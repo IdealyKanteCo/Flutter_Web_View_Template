@@ -51,7 +51,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    return Stack( 
       children: [
         WebViewWidget(controller: controller),
         loadingPercentage < 100
