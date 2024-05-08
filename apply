@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+chmod +x jq
+chmod +x magick
+
 # Fonction pour afficher les erreurs
 afficher_erreur() {
     local message="$1"
@@ -16,24 +19,6 @@ verifier_fichier() {
         exit 1
     fi
 }
-
-# Fonction pour installer Flutter localement
-installer_flutter() {
-    local flutter_url="https://storage.googleapis.com/flutter_infra/releases/stable/linux/flutter_linux_$(uname -m).tar.xz"
-    local install_dir="$HOME/flutter"
-    echo "Téléchargement et installation de Flutter..."
-    mkdir -p "$install_dir"
-    curl -fsSL "$flutter_url" | tar xJ -C "$install_dir"
-    export PATH="$install_dir/flutter/bin:$PATH"
-}
-
-# Vérifier si Flutter est installé
-if ! command -v flutter &> /dev/null; then
-    installer_flutter
-fi
-
-# Exécuter 'flutter pub get'
-flutter pub get || { afficher_erreur "Erreur lors de l'exécution de 'flutter pub get'"; exit 1; }
 
 # Lire le fichier param.conf
 source ./param.conf || { afficher_erreur "Erreur lors de la lecture de param.conf"; exit 1; }
@@ -66,21 +51,177 @@ remplacer_valeur() {
 remplacer_valeur "WEB_VIEW_LINK" "$LIEN_WEB_VIEW" ".env"
 remplacer_valeur "APP_BG_COLOR" "$BG_APP" ".env"
 
-# Traiter les paramètres spécifiques
+# Remplacement du nom de l'application de l'IOS et de L'Android
+
+echo "Remplacement du nom"
+
+function remplacer_nom_application_ios() {
+    # Chemin vers le fichier Info.plist
+    local INFO_PLIST="$2"
+    # Nom de l'application à utiliser
+    local NOM_APPLICATION="$1"
+
+    # Définition du nouveau contenu pour le dict
+    local NOUVEAU_DICT="<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+    <dict>
+        <key>CFBundleDevelopmentRegion</key>
+        <string>\$(DEVELOPMENT_LANGUAGE)</string>
+        <key>CFBundleDisplayName</key>
+        <string>$NOM_APPLICATION</string>
+        <key>CFBundleExecutable</key>
+        <string>\$(EXECUTABLE_NAME)</string>
+        <key>CFBundleIdentifier</key>
+        <string>\$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+        <key>CFBundleInfoDictionaryVersion</key>
+        <string>6.0</string>
+        <key>CFBundleName</key>
+        <string>web_view_application</string>
+        <key>CFBundlePackageType</key>
+        <string>APPL</string>
+        <key>CFBundleShortVersionString</key>
+        <string>\$(FLUTTER_BUILD_NAME)</string>
+        <key>CFBundleSignature</key>
+        <string>????</string>
+        <key>CFBundleVersion</key>
+        <string>\$(FLUTTER_BUILD_NUMBER)</string>
+        <key>LSRequiresIPhoneOS</key>
+        <true/>
+        <key>UILaunchStoryboardName</key>
+        <string>LaunchScreen</string>
+        <key>UIMainStoryboardFile</key>
+        <string>Main</string>
+        <key>UISupportedInterfaceOrientations</key>
+        <array>
+            <string>UIInterfaceOrientationPortrait</string>
+            <string>UIInterfaceOrientationLandscapeLeft</string>
+            <string>UIInterfaceOrientationLandscapeRight</string>
+        </array>
+        <key>UISupportedInterfaceOrientations~ipad</key>
+        <array>
+            <string>UIInterfaceOrientationPortrait</string>
+            <string>UIInterfaceOrientationPortraitUpsideDown</string>
+            <string>UIInterfaceOrientationLandscapeLeft</string>
+            <string>UIInterfaceOrientationLandscapeRight</string>
+        </array>
+        <key>CADisableMinimumFrameDurationOnPhone</key>
+        <true/>
+        <key>UIApplicationSupportsIndirectInputEvents</key>
+        <true/>
+        <key>UIStatusBarHidden</key>
+        <false/>
+    </dict>
+</plist>"
+
+    # Remplacement du contenu du dict dans le fichier Info.plist
+    echo "$NOUVEAU_DICT" > $INFO_PLIST
+}
+
+
 if [ -n "${NOM_APP-}" ]; then
-    dart run rename_app:main all="$NOM_APP" || afficher_erreur "Erreur lors du renommage de l'application"
+    android_manifest=$(realpath android/app/src/main/AndroidManifest.xml)
+    info_plist=$(realpath ios/Runner/Info.plist)
+
+    # Remplacement du label dans AndroidManifest.xml
+    sed -i "s/android:label=\"[^\"]*\"/android:label=\"$NOM_APP\"/" $android_manifest
+    
+    # Remplacement de la clé CFBundleDisplayName dans Info.plist
+    remplacer_nom_application_ios "$NOM_APP" $info_plist
 fi
+
+echo "Remplacement du logo"
+
+# Remplacement du nom de logo de l'application de l'IOS et de L'Android
 
 if [ -n "${LOGO_APP-}" ]; then
-    LOGO_APP_escaped=$(sed 's/[&/\]/\\&/g' <<< "$LOGO_APP")
-    sed -i "s/image_path: .*/image_path: \"$LOGO_APP_escaped\"/" "$(pwd)/launcher_icons.yaml" || afficher_erreur "Erreur lors du remplacement de image_path dans launcher_icons.yaml"
-    dart run flutter_launcher_icons -f "$(pwd)/launcher_icons.yaml" || afficher_erreur "Erreur lors de l'exécution de flutter_launcher_icons"
+    LOGO_APP_PATH=$(pwd)/$LOGO_APP
+    ANDROID_APP_PATH=$(pwd)/android/app/src/main/res
+
+    ### Pour Android
+    # Redimensionnement du logo pour Android
+    ./magick convert "$LOGO_APP_PATH" -resize 72x72 $ANDROID_APP_PATH/mipmap-hdpi/launcher_icon.png
+    ./magick convert "$LOGO_APP_PATH" -resize 48x48 $ANDROID_APP_PATH/mipmap-mdpi/launcher_icon.png
+    ./magick convert "$LOGO_APP_PATH" -resize 96x96 $ANDROID_APP_PATH/mipmap-xhdpi/launcher_icon.png
+    ./magick convert "$LOGO_APP_PATH" -resize 144x144 $ANDROID_APP_PATH/mipmap-xxhdpi/launcher_icon.png
+    ./magick convert "$LOGO_APP_PATH" -resize 192x192 $ANDROID_APP_PATH/mipmap-xxxhdpi/launcher_icon.png
+    
+    # En fonction des tailles dui mipmap
+
+    ### Pour IOS
+    IOS_CONFIG_PATH=ios/Runner/Assets.xcassets/AppIcon.appiconset/Contents.json
+    IOS_ICON_PATH=ios/Runner/Assets.xcassets/AppIcon.appiconset
+
+    # Initialisation des tableaux avec jq
+    # Lecture du fichier JSON
+    ./jq -c '.images[]' $(pwd)/$IOS_CONFIG_PATH | while read image; do
+        # Traitement de chaque élément de l'image
+        echo "Traitement de l'image : $image"
+        # Extractions des noms, tailles et échelles d'icônes
+        ICON_NAME=$(echo "$image" | ./jq -r '.filename')
+        ICON_SIZE=$(echo "$image" | ./jq -r '.size')
+        ICON_SCALE=$(echo "$image" | ./jq -r '.scale')
+        
+        # Utilisation des variables extraites
+        SCALE_FACTOR=$(echo "$ICON_SCALE" | grep -oP '[0-9]+')
+        
+        # Calcul de la taille finale en fonction de l'échelle
+        FIRST_NUMBER=$(echo "$ICON_SIZE" | cut -d'x' -f1)
+        SECOND_NUMBER=$(echo "$ICON_SIZE" | cut -d'x' -f2)
+
+        FINAL_WIDTH=$(echo $FIRST_NUMBER*$SCALE_FACTOR | bc);
+        FINAL_HEIGHT=$(echo $SECOND_NUMBER*$SCALE_FACTOR | bc);
+
+        # Nom de sortie souhaité
+        OUTPUT_NAME="$IOS_ICON_PATH/$ICON_NAME";
+
+        # Redimensionnement de l'image originale
+        convert "$LOGO_APP_PATH" -resize "$FINAL_WIDTH"x"$FINAL_HEIGHT" "${OUTPUT_NAME}"
+    done
 fi
 
+# Remplacement du splash screen de l'application de l'IOS et de L'Android
 if [ -n "${LOGO_LANCEMENT-}" ]; then
-    LOGO_LANCEMENT_escaped=$(sed 's/[&/\]/\\&/g' <<< "$LOGO_LANCEMENT")
-    sed -i "s/image: .*/image: \"$LOGO_LANCEMENT_escaped\"/" "$(pwd)/flutter_native_splash.yaml" || afficher_erreur "Erreur lors du remplacement de image dans flutter_native_splash.yaml"
-    dart run flutter_native_splash:create --path="$(pwd)/flutter_native_splash.yaml" || afficher_erreur "Erreur lors de la création de l'écran de lancement"
+    LOGO_LANCEMENT_PATH=$(pwd)/$LOGO_LANCEMENT
+    ANDROID_APP_PATH=$(pwd)/android/app/src/main/res
+
+    ### Pour Android
+    ./magick convert "$LOGO_LANCEMENT_PATH" -resize 288x288 $ANDROID_APP_PATH/drawable-hdpi/splash.png
+    ./magick convert "$LOGO_LANCEMENT_PATH" -resize 192x192 $ANDROID_APP_PATH/drawable-mdpi/splash.png
+    ./magick convert "$LOGO_LANCEMENT_PATH" -resize 384x384 $ANDROID_APP_PATH/drawable-xhdpi/splash.png
+    ./magick convert "$LOGO_LANCEMENT_PATH" -resize 576x576 $ANDROID_APP_PATH/drawable-xxhdpi/splash.png
+    ./magick convert "$LOGO_LANCEMENT_PATH" -resize 768x768 $ANDROID_APP_PATH/drawable-xxxhdpi/splash.png
+
+    ### Pour IOS
+    IOS_CONFIG_PATH=ios/Runner/Assets.xcassets/LaunchImage.imageset/Contents.json
+    IOS_ICON_PATH=ios/Runner/Assets.xcassets/LaunchImage.imageset
+
+    # Lecture du fichier JSON
+    ./jq -c '.images[]' $(pwd)/$IOS_CONFIG_PATH | while read image; do
+        # Traitement de chaque élément de l'image
+        echo "Traitement de l'image : $image"
+        # Extractions des noms, tailles et échelles d'icônes
+        ICON_NAME=$(echo "$image" | ./jq -r '.filename')
+        ICON_SIZE=$(echo "$image" | ./jq -r '.size')
+        ICON_SCALE=$(echo "$image" | ./jq -r '.scale')
+        
+        # Utilisation des variables extraites
+        SCALE_FACTOR=$(echo "$ICON_SCALE" | grep -oP '[0-9]+')
+        
+        # Calcul de la taille finale en fonction de l'échelle
+        FIRST_NUMBER=192
+        SECOND_NUMBER=192
+
+        FINAL_WIDTH=$(echo $FIRST_NUMBER*$SCALE_FACTOR | bc);
+        FINAL_HEIGHT=$(echo $SECOND_NUMBER*$SCALE_FACTOR | bc);
+
+        # Nom de sortie souhaité
+        OUTPUT_NAME="$IOS_ICON_PATH/$ICON_NAME";
+
+        # Redimensionnement de l'image originale
+        echo convert "$LOGO_LANCEMENT_PATH" -resize "$FINAL_WIDTH"x"$FINAL_HEIGHT" "${OUTPUT_NAME}"
+        convert "$LOGO_LANCEMENT_PATH" -resize "$FINAL_WIDTH"x"$FINAL_HEIGHT" "${OUTPUT_NAME}"
+    done
 fi
 
 echo "Compilation du fichier apk"
