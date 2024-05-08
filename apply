@@ -224,9 +224,4 @@ if [ -n "${LOGO_LANCEMENT-}" ]; then
     done
 fi
 
-echo "Compilation du fichier apk"
-
-flutter build appbundle
-flutter build apk --split-per-abi
-
 echo "Le script s'est exécuté avec succès."
