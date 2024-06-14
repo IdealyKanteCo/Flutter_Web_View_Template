@@ -3,6 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:hexcolor/hexcolor.dart';
 import 'package:mon_application/screens/web_view_screen.dart';
+import 'package:mon_application/services/permission_manager.dart';
 
 void main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +34,13 @@ class WebViewApplication extends StatefulWidget {
 
 class _WebViewApplicationState extends State<WebViewApplication> {
   bool isWebViewLoaded = false;
+  PermissionManager permissionManager = PermissionManager();
+
+  @override
+  void initState() {
+    super.initState();
+    permissionManager.handlePermission();
+  }
   
   @override
   Widget build(BuildContext context) {
